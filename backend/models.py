@@ -57,3 +57,29 @@ class Day:
             "date": self.date,
             "tasks": [t.to_json() for t in self.tasks]
         }
+    
+
+class Notification:
+    def __init__(self, id, message, user_id=None, task_id=None, type="info", title=None):
+        self.id = id
+        self.message = message
+        self.user_id = user_id
+        self.task_id = task_id
+        self.type = type            # "info" | "warning" | "success" | "error"
+        self.title = title
+        self.is_read = False
+        self.created_at = datetime.now().isoformat(timespec="seconds")
+        self.read_at = None
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "message": self.message,
+            "user_id": self.user_id,
+            "task_id": self.task_id,
+            "type": self.type,
+            "title": self.title,
+            "is_read": self.is_read,
+            "created_at": self.created_at,
+            "read_at": self.read_at
+        }

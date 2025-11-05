@@ -7,7 +7,8 @@
 #   - "/tasks"   → liefert eine Liste von Aufgaben (als JSON)
 
 from flask import Flask, jsonify, request   # Flask = Web-Framework; jsonify = macht JSON-Antworten
-from models import User, Day, Task  # jetzt auch User und Day importieren!
+from models import User, Day, Task, Notification # jetzt auch User und Day importieren!
+
 
 # Wir erzeugen eine Flask-App-Instanz. Das ist dein Webserver.
 
@@ -21,7 +22,7 @@ app = Flask(__name__) #Hier erstellst du deine Web-App (das Herz deiner Anwendun
 users = []  # Liste aller Benutzer
 days = []   # Liste aller Tage
 tasks = []  # Liste aller Aufgaben                      
-
+notifications = []  # Liste aller Benachrichtigungen
 # -----------------------------
 # 1) Beispiel-Daten (in-memory)
 # -----------------------------
@@ -281,7 +282,7 @@ Invoke-RestMethod -Method PUT `
 
 
 # ---------------------------------------------------------------
-# 3) Benutzer anlegen: POST /users
+# 3) Benutzer anlegen,sie dient dazu, einen neuen Benutzer (User) in dein System hinzuzufügen: POST /users
 # ---------------------------------------------------------------
 @app.route("/users", methods=["POST"])  # Definiert eine neue Route /users, die NUR POST-Anfragen akzeptiert
 def create_user():                      # Funktionsname ist frei wählbar; Flask ruft sie auf, wenn /users per POST kommt
@@ -421,6 +422,169 @@ def add_task_to_day(day_id):
         "task": new_task.to_json()
     }), 201  # 201 = Created
        
+
+
+
+
+# ---------------------------------------------------------------
+# 1) Neue Notification (Benachrichtigung) erstellen: POST /notifications
+# ---------------------------------------------------------------
+@app.route("/notifications", methods=["POST"])  # Diese Route reagiert auf POST-Anfragen (etwas Neues anlegen)
+def create_notification():
+    """
+    Diese Funktion erstellt eine neue Benachrichtigung (Notification).
+    Beispiel für den Body, den du an den Server schickst:
+
+        {
+          "message": "Task morgen fällig",
+          "user_id": 1,
+          "task_id": 2,
+          "type": "warning",
+          "title": "Erinnerung"
+        }
+
+    Erklärung:
+    - message  → Text der Benachrichtigung (Pflichtfeld)
+    - user_id  → (optional) für welchen Benutzer
+    - task_id  → (optional) zu welcher Aufgabe gehört die Benachrichtigung
+    - type     → (optional) Art der Nachricht ("info", "success", "warning", "error")
+    - title    → (optional) kurzer Titel oder Überschrift
+    """
+
+    # 1️⃣ JSON-Daten lesen, die der Benutzer im Body gesendet hat.
+    # request.get_json() wandelt den JSON-Text in ein Python-Dictionary um.
+    # Das „or {}“ sorgt dafür, dass wir eine leere Dict haben, wenn nichts geschickt wurde.
+    data = request.get_json() or {}
+
+    # 2️⃣ Das wichtigste Feld ist „message“ – ohne das ergibt eine Notification keinen Sinn.
+    message = data.get("message")
+
+    # Wenn keine Nachricht gesendet wurde → Fehlerantwort mit Status 400 (Bad Request)
+    if not message:
+        return jsonify({"error": "message ist erforderlich"}), 400
+
+    # 3️⃣ Eine neue eindeutige ID vergeben
+    # Wenn schon Notifications existieren, nehmen wir die letzte ID + 1
+    # Wenn es noch keine gibt, starten wir mit ID = 1
+    new_id = notifications[-1].id + 1 if notifications else 1
+
+    # 4️⃣ Neues Notification-Objekt erzeugen (siehe models.py → class Notification)
+    n = Notification(
+        id=new_id,                       # eindeutige ID
+        message=message,                 # Nachrichtentext
+        user_id=data.get("user_id"),     # optional: Benutzer-ID
+        task_id=data.get("task_id"),     # optional: Task-ID (falls Benachrichtigung zu einer Aufgabe gehört)
+        type=data.get("type", "info"),   # Standardtyp ist "info", falls nichts angegeben
+        title=data.get("title"),         # optional: Titel
+    )
+
+    # 5️⃣ Die neue Notification in unsere Liste einfügen (unsere kleine In-Memory-Datenbank)
+    notifications.append(n)
+
+    # 6️⃣ Antwort an den Client zurückgeben
+    # jsonify() → wandelt Python-Daten in JSON um
+    # Wir schicken eine Bestätigung + das neue Notification-Objekt zurück
+    # Statuscode 201 = „Created“ (etwas wurde erfolgreich erstellt)
+    return jsonify({
+        "message": "Notification erstellt",
+        "notification": n.to_json()  # to_json() wandelt das Objekt in ein Dictionary
+    }), 201
+
+
+# ---------------------------------------------------------------
+# 2) Notifications anzeigen (optional mit Filter): GET /notifications
+# ---------------------------------------------------------------
+@app.route("/notifications", methods=["GET"])  # Diese Route reagiert auf GET-Anfragen (Daten lesen)
+def list_notifications():
+    """
+    Gibt alle Benachrichtigungen zurück.
+    Du kannst optionale Filter in der URL angeben:
+        /notifications?user_id=1&unread=true
+
+    - user_id → zeigt nur die Notifications für diesen Benutzer
+    - unread  → zeigt nur ungelesene Benachrichtigungen (true / false)
+    """
+
+    # 1️⃣ Query-Parameter aus der URL lesen
+    # Beispiel: bei /notifications?user_id=1 → user_id = 1
+    user_id = request.args.get("user_id", type=int)
+
+    # Wenn der Parameter unread=true angegeben wurde, wollen wir nur ungelesene anzeigen.
+    # request.args.get("unread", "false") gibt den Text nach dem = zurück oder "false", wenn nichts da ist.
+    # Wir wandeln alles in Kleinbuchstaben und prüfen, ob es "1", "true" oder "yes" ist.
+    unread = (request.args.get("unread", "false").lower() in ("1", "true", "yes"))
+
+    # 2️⃣ Ausgangsliste ist einfach unsere Notification-Liste
+    items = notifications
+
+    # 3️⃣ Wenn eine user_id angegeben wurde → nur Notifications dieses Benutzers behalten
+    if user_id is not None:
+        items = [n for n in items if n.user_id == user_id]
+
+    # 4️⃣ Wenn unread=True → nur ungelesene Notifications behalten
+    if unread:
+        items = [n for n in items if not n.is_read]
+
+    # 5️⃣ Sortieren (neueste zuerst)
+    # Wir sortieren nach dem Feld created_at (Zeitpunkt der Erstellung)
+    items = sorted(items, key=lambda n: n.created_at, reverse=True)
+
+    # 6️⃣ Rückgabe als JSON-Liste
+    # Jede Notification wird mit to_json() in ein Dictionary umgewandelt
+    return jsonify([n.to_json() for n in items]), 200  # 200 = OK (alles erfolgreich)
+
+
+# ---------------------------------------------------------------
+# 3) Eine Notification als „gelesen“ markieren: PATCH /notifications/<id>/read
+# ---------------------------------------------------------------
+@app.route("/notifications/<int:nid>/read", methods=["PATCH"])  # PATCH = teilweise aktualisieren
+def read_notification(nid):
+    """
+    Markiert eine bestimmte Benachrichtigung als gelesen.
+    Beispiel:
+        PATCH /notifications/3/read
+
+    Bedeutung:
+    - Wir suchen die Notification mit ID 3
+    - Wir setzen is_read = True
+    - Wir speichern den Zeitpunkt in read_at
+    """
+
+    # 1️⃣ Suchen der Notification mit passender ID
+    # next(...) → gibt das erste Element zurück, das zur Bedingung passt
+    # (x for x in notifications if x.id == nid) → Generator, der alle überprüft
+    # Falls keine gefunden wird, kommt None zurück
+    n = next((x for x in notifications if x.id == nid), None)
+
+    # 2️⃣ Wenn keine Notification mit dieser ID existiert → Fehler 404 (Not Found)
+    if not n:
+        return jsonify({"error": "Notification nicht gefunden"}), 404
+
+    # 3️⃣ Wenn sie existiert und noch nicht gelesen wurde:
+    if not n.is_read:
+        n.is_read = True   # Markiere als gelesen
+        from datetime import datetime as _dt
+        n.read_at = _dt.now().isoformat(timespec="seconds")  # Zeitpunkt speichern
+
+    # 4️⃣ Rückgabe: aktualisierte Notification als JSON
+    return jsonify(n.to_json()), 200  # 200 = OK
+
+# das was soll ich in terminal tippen:
+"""
+$body = @{
+  user_id = 1
+  task_id = 2
+  message = "Präsentation morgen fällig"   # Umlaute ok
+  type    = "warning"
+  title   = "Erinnerung"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method POST `
+  -Uri http://127.0.0.1:5000/notifications `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $body
+"""
+
 
 
 # Das hier startet den Server im "Entwicklermodus" (debug=True).
