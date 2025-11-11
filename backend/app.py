@@ -1,594 +1,197 @@
-# app.py  Ouissal
 # ===============================
-# Diese Datei startet den Flask-Webserver und definiert "Routen" (URLs),
-# die dein Browser aufrufen kann. Jede Route liefert eine Antwort zurück.
-# Wir definieren:
-#   - "/"        → einfacher Test, um zu sehen, dass der Server läuft
-#   - "/tasks"   → liefert eine Liste von Aufgaben (als JSON)
+# app.py
+# ===============================
+# Diese Datei startet den Flask-Webserver und definiert die "Routen" (URLs),
+# über die der Client (z. B. dein Browser oder PowerShell) mit dem Backend kommuniziert.
 
-from flask import Flask, jsonify, request   # Flask = Web-Framework; jsonify = macht JSON-Antworten
-from models import User, Day, Task, Notification # jetzt auch User und Day importieren!
-
-
-# Wir erzeugen eine Flask-App-Instanz. Das ist dein Webserver.
-
-app = Flask(__name__) #Hier erstellst du deine Web-App (das Herz deiner Anwendung).
-                      #app ist eine Variable, in der deine Flask-Anwendung gespeichert wird.
-                      #Flask(__name__) ist ein Konstruktor — er erstellt ein neues Flask-Objekt.
+from flask import Flask, jsonify, request   # Flask = Web-Framework, jsonify = JSON-Antworten, request = Eingaben lesen
+from models import User, Task               # Wir importieren NUR unsere beiden Klassen: User und Task
 
 # ===============================
-# "Datenbanken" (vorläufig in Speicher-Listen)
+# Flask-Anwendung erstellen
 # ===============================
+app = Flask(__name__)  # Erstellt eine Instanz der Flask-App → das Herz deines Webservers
+
+# ===============================
+# "Datenbank" (in-memory)
+# ===============================
+# Wir speichern Benutzer und Aufgaben nur im Arbeitsspeicher.
+# D.h. die Daten verschwinden, sobald du den Server stoppst (später evtl. echte DB).
 users = []  # Liste aller Benutzer
-days = []   # Liste aller Tage
-tasks = []  # Liste aller Aufgaben                      
-notifications = []  # Liste aller Benachrichtigungen
-# -----------------------------
-# 1) Beispiel-Daten (in-memory)
-# -----------------------------
-# Für den Anfang speichern wir Aufgaben nur im Arbeitsspeicher (in einer Python-Liste).
-# Später (nächster Schritt) ersetzen wir das durch eine richtige Datenbank (SQLite).
-tasks = [
-    Task(1, "Bericht schreiben", "Monatsbericht für den Chef erstellen", "In Progress"),
+tasks = [   # Beispiel-Aufgaben
+    Task(1, "Bericht schreiben", "Monatsbericht für den Chef erstellen", "Doing"),
     Task(2, "Präsentation vorbereiten", "Folien für Meeting am Montag", "To Do"),
-    Task(3, "Code überprüfen", "Backend testen und Kommentare ergänzen", "Done")
+    Task(3, "Code überprüfen", "Backend testen und Kommentare ergänzen", "Done"),
 ]
 
+# ===============================
+# ROUTEN (Endpoints)
+# ===============================
 
-# -----------------------------
-# 2) Route: Startseite ("/")
-# -----------------------------
-# Diese Route ist nur zum Testen, ob der Server läuft.
-# Wenn du im Browser http://127.0.0.1:5000/ öffnest, solltest du den Text unten sehen.
-@app.route("/") #Das ist ein sogenannter Decorator in Python (also ein Zusatz, der Funktionen steuert).
-                #@app.route("/") sagt Flask:
-                #„Wenn jemand im Browser die URL / öffnet, dann führe die folgende Funktion aus.“
+# -------------------------------
+# 1) Startseite – einfacher Test
+# -------------------------------
+@app.route("/")
 def home():
-    # Rückgabe ist einfacher Text (kein JSON)
+    # Wird aufgerufen, wenn man http://127.0.0.1:5000/ im Browser öffnet
     return "Backend funktioniert ✅ (Flask läuft!)"
 
-# -----------------------------
-# 3) Route: /tasks (GET)
-# -----------------------------
-# Diese Route gibt die Aufgabenliste als JSON zurück.
-# GET bedeutet: Daten vom Server holen (lesen).
-@app.route("/tasks", methods=["GET"])#„Wenn jemand im Browser zu /tasks geht,
-                                     #dann führe bitte die Funktion get_tasks() aus.“
-                                     #Wenn du schreibst: 👉 http://127.0.0.1:5000/tasks
-                                     #Flask erkennt: „Ah! Das ist die Seite /tasks“
-                                     #Flask startet die Funktion unten 👇
+
+# ---------- TASKS ----------
+# -------------------------------
+# 2) Alle Aufgaben anzeigen (GET)
+# -------------------------------
+@app.route("/tasks", methods=["GET"])
 def get_tasks():
-    """
-    1) Wir nehmen die Python-Liste 'tasks'
-    2) Wandeln jedes Task-Objekt mit to_json() in ein Dictionary um
-    3) jsonify() macht daraus eine echte JSON-Antwort für den Browser
-    """
-    task_list = [task.to_json() for task in tasks] #Diese Zeile ist der Kern:
-                                                   #Hier bereitest du die Daten vor, die du an den Browser schicken willst.
-    
-    return jsonify(task_list), 200   #„Okay, ich habe die Aufgabenliste fertig,
-                                     #ich schicke sie an den Browser zurück."
-                                     #jsonify(task_list) → wandelt deine Liste in JSON um
-                                     #(das ist ein Format, das alle Webbrowser verstehen).
-                                     #200 → bedeutet alles ist gut, kein Fehler (200 = Erfolgscode).
-    
-    """Wenn du /tasks aufrufst, zeigt Flask dir alle Aufgaben in einer Form, die dein Browser lesen 
-       kann (JSON)."""
+    # Gibt alle Aufgaben zurück, jede als Dictionary (über to_json())
+    return jsonify([t.to_json() for t in tasks]), 200
 
 
-
-#------------------------------
-# 4) Route: /tasks (POST)
-# -----------------------------
-# Diese Route erlaubt es, neue Aufgaben hinzuzufügen.
-# Wir schicken JSON-Daten vom Client an den Server.
+# -------------------------------
+# 3) Neue Aufgabe hinzufügen (POST)
+# -------------------------------
 @app.route("/tasks", methods=["POST"])
 def add_task():
-    """
-    1) request.get_json() liest die Daten, die der Benutzer schickt
-    2) Wir holen Titel, Beschreibung und Status aus dem JSON
-    3) Wir erstellen eine neue Task und hängen sie an die Liste
-    """
-    data = request.get_json()
-
-    # Falls die Daten leer sind
+    # JSON-Daten vom Client lesen
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Keine Daten empfangen"}), 400
 
-    # Felder aus dem JSON holen
-    title = data.get("title")
-    description = data.get("description")
+    # Felder auslesen, mit Standardwerten
+    title = (data.get("title") or "").strip()
+    description = data.get("description") or ""
     status = data.get("status", "To Do")
 
-    # Neue ID berechnen (letzte ID + 1)
+    # Pflichtfeld-Check
+    if not title:
+        return jsonify({"error": "title ist Pflicht"}), 400
+
+    # Neue ID generieren (letzte ID + 1)
     new_id = tasks[-1].id + 1 if tasks else 1
 
-    # Neue Aufgabe erzeugen
+    # Neues Task-Objekt erstellen
     new_task = Task(new_id, title, description, status)
-    tasks.append(new_task)
+    tasks.append(new_task)  # Zur Liste hinzufügen
 
-    # Erfolgsmeldung zurückgeben
+    # Erfolgsantwort zurückgeben
     return jsonify({"message": "Aufgabe hinzugefügt!", "task": new_task.to_json()}), 201
 
-#das was soll ich in terminal schreiben:
-"""
-$body = @{
-  title = "Neue Aufgabe"
-  description = "Test per POST"
-  status = "To Do"
-} | ConvertTo-Json
 
-Invoke-RestMethod -Method POST `
-  -Uri http://127.0.0.1:5000/tasks `
-  -ContentType "application/json" `
-  -Body $body
-  """
-
-# -----------------------------
-# 5) Route: /tasks/<id> (DELETE)
-# -----------------------------
-# Diese Route löscht eine bestimmte Aufgabe aus der Aufgabenliste.
-# <int:task_id> bedeutet: Flask erwartet eine Zahl (ID) in der URL.
-# Beispiel: Wenn du im Browser /tasks/3 eingibst, ist task_id = 3.
+# -------------------------------
+# 4) Aufgabe löschen (DELETE)
+# -------------------------------
 @app.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    """
-    Funktion, um eine Aufgabe zu löschen.
-    Parameter:
-        task_id (int): die ID der Aufgabe, die gelöscht werden soll.
-    """
-
-    # Wir sagen Flask, dass wir auf die globale Variable 'tasks' zugreifen wollen,
-    # die oben in deinem Code definiert ist (die Liste mit allen Aufgaben).
-    global tasks
-
-    # Schritt 1: Wir suchen in der Liste 'tasks' nach einer Aufgabe mit der passenden ID.
-    #   next(...) → gibt das erste Element zurück, das zur Bedingung passt.
-    #   (t for t in tasks if t.id == task_id) → Generator, der alle Tasks überprüft.
-    # Wenn keine passende Aufgabe gefunden wird, liefert next(..., None) den Wert None.
+    global tasks  # Wir bearbeiten die globale Liste
+    # Gesuchte Aufgabe nach ID finden
     task_to_delete = next((t for t in tasks if t.id == task_id), None)
-
-    # Schritt 2: Wenn die Aufgabe nicht existiert, geben wir eine Fehlermeldung zurück.
-    # jsonify(...) → wandelt ein Dictionary in eine JSON-Antwort für den Browser um.
-    # HTTP-Statuscode 404 = "Not Found" (nicht gefunden)
     if task_to_delete is None:
-        return jsonify({
-            "error": f"Task mit ID {task_id} wurde nicht gefunden"
-        }), 404
+        return jsonify({"error": f"Task mit ID {task_id} wurde nicht gefunden"}), 404
 
-    # Schritt 3: Wenn die Aufgabe existiert, erstellen wir eine neue Liste,
-    # die alle Tasks enthält, außer die mit der ID, die gelöscht werden soll.
-    #   [t for t in tasks if t.id != task_id]
-    # Das nennt man "List Comprehension" – eine elegante Art, Listen zu filtern.
+    # Liste neu aufbauen (ohne die gelöschte Aufgabe)
     tasks = [t for t in tasks if t.id != task_id]
-
-    # Schritt 4: Wir geben eine Erfolgsmeldung zurück.
-    # jsonify(...) → damit der Browser / Client (z. B. PowerShell oder Postman)
-    # eine schön formatierte JSON-Antwort bekommt.
-    # HTTP-Statuscode 200 = "OK" (alles in Ordnung)
-    return jsonify({
-        "message": f"Task mit ID {task_id} erfolgreich gelöscht"
-    }), 200
- 
-# das was soll ich in Terminal schreiben:
-"""
-Invoke-RestMethod -Method DELETE -Uri http://127.0.0.1:5000/tasks/4
-"""
+    return jsonify({"message": f"Task mit ID {task_id} erfolgreich gelöscht"}), 200
 
 
-
-# -----------------------------
-# 6) Route: /tasks/<id> (PUT)
-# -----------------------------
-# Diese Route erlaubt es, eine vorhandene Aufgabe zu AKTUALISIEREN.
-# Das bedeutet: wir können z. B. den Titel, die Beschreibung oder den Status ändern.
-# <int:task_id> → steht für die ID der Aufgabe, die geändert werden soll.
+# -------------------------------
+# 5) Aufgabe aktualisieren (PUT)
+# -------------------------------
 @app.route("/tasks/<int:task_id>", methods=["PUT"])
 def update_task(task_id):
-    """
-    Funktion zum Aktualisieren (Bearbeiten) einer bestehenden Aufgabe.
-
-    Beispiel:
-        Wenn der Benutzer z. B. ID=2 ändern möchte,
-        ruft er /tasks/2 mit der Methode PUT auf
-        und sendet im Body ein JSON mit den neuen Daten.
-    """
-
-    # -------------------------------------
-    # 1) JSON-Daten aus der Anfrage auslesen
-    # -------------------------------------
-    # request.get_json() → liest den JSON-Text, den der Benutzer geschickt hat,
-    # und wandelt ihn in ein Python-Dictionary um.
-    # Beispiel:
-    #   {
-    #     "title": "Neuer Titel",
-    #     "status": "Done"
-    #   }
-    data = request.get_json()
-
-    # Wenn keine Daten gesendet wurden (z. B. leere Anfrage):
+    # Neue Daten aus Anfrage holen
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Keine Daten empfangen"}), 400
 
-    # -------------------------------------
-    # 2) Aufgabe in unserer Liste finden
-    # -------------------------------------
-    # Wir durchsuchen die globale Liste "tasks" nach der Aufgabe mit der passenden ID.
-    #   next((t for t in tasks if t.id == task_id), None)
-    # → sucht in tasks nach dem ersten Element, bei dem t.id == task_id.
-    # → Wenn nichts gefunden wird, gibt es None zurück.
+    # Gesuchte Aufgabe finden
     task = next((t for t in tasks if t.id == task_id), None)
-
-    # Wenn keine passende Aufgabe existiert, geben wir einen Fehler zurück.
     if task is None:
         return jsonify({"error": f"Task mit ID {task_id} wurde nicht gefunden"}), 404
 
-    # -------------------------------------
-    # 3) Felder aktualisieren (Teil-Update)
-    # -------------------------------------
-    # Wir prüfen, welche Felder im JSON enthalten sind.
-    # Nur die gesendeten Felder werden geändert,
-    # die anderen bleiben unverändert.
+    # Felder aktualisieren, falls im JSON enthalten
     if "title" in data:
-        # Das neue Feld 'title' überschreibt den alten Wert
-        task.title = data["title"]
+        new_title = (data["title"] or "").strip()
+        if not new_title:
+            return jsonify({"error": "title darf nicht leer sein"}), 400
+        task.title = new_title
 
     if "description" in data:
-        # Das neue Feld 'description' überschreibt den alten Wert
-        task.description = data["description"]
+        task.description = data["description"] or ""
 
     if "status" in data:
-        # Das neue Feld 'status' überschreibt den alten Wert
-        task.status = data["status"]
+        task.status = data["status"]  # optional: hier prüfen, ob erlaubt
 
-    # -------------------------------------
-    # 4) Antwort zurückgeben
-    # -------------------------------------
-    # jsonify() → wandelt das Dictionary in JSON um,
-    # damit der Browser / Client (PowerShell, Postman, etc.) es lesen kann.
-    # Wir geben auch die aktualisierte Aufgabe zurück, damit der Benutzer sehen kann,
-    # was sich geändert hat.
-    return jsonify({
-        "message": "Task erfolgreich aktualisiert!",
-        "task": task.to_json()
-    }), 200
-
-# das was soll ich in Terminal schreiben
-"""
-$update = @{
-  title = "Praesentation fertig"   # kein ä
-  status = "Done"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method PUT `
-  -Uri http://127.0.0.1:5000/tasks/2 `
-  -ContentType "application/json" `
-  -Body $update
-"""
+    # Erfolgsmeldung zurückgeben
+    return jsonify({"message": "Task erfolgreich aktualisiert!", "task": task.to_json()}), 200
 
 
-# ================================================================
-# AB HIER: NEUE ROUTEN (Schritt 3–7) – MIT KOMMENTAREN ZU JEDER ZEILE
-# ================================================================
+# ---------- USERS ----------
+# -------------------------------
+# 6) Benutzer erstellen (POST)
+# -------------------------------
+@app.route("/users", methods=["POST"])
+def create_user():
+    # JSON-Daten lesen
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Keine Daten empfangen"}), 400
 
-# WICHTIG: Ganz oben in der Datei musst du sicherstellen, dass dieser Import vorhanden ist:
-# from models import User, Day, Task
-# (Falls du den schon hast, NICHT doppelt einfügen!)
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
 
-# Außerdem brauchst du (einmal weit oben) diese drei Listen als "Mini-Datenbank":
-# users = []   # alle Benutzer
-# days  = []   # alle Kalendertage
-# tasks = []   # alle Aufgaben (hast du schon – NICHT doppelt anlegen!)
+    # Pflichtfelder prüfen
+    if not username or not password:
+        return jsonify({"error": "username und password sind Pflichtfelder"}), 400
 
-
-# ---------------------------------------------------------------
-# 3) Benutzer anlegen,sie dient dazu, einen neuen Benutzer (User) in dein System hinzuzufügen: POST /users
-# ---------------------------------------------------------------
-@app.route("/users", methods=["POST"])  # Definiert eine neue Route /users, die NUR POST-Anfragen akzeptiert
-def create_user():                      # Funktionsname ist frei wählbar; Flask ruft sie auf, wenn /users per POST kommt
-    """
-    Erwartet JSON-Daten vom Client, z. B.:
-        { "username": "ouissal", "password": "1234" }
-    Erstellt daraus einen neuen Benutzer und speichert ihn in der Liste 'users'.
-    """
-    data = request.get_json()          # Liest den JSON-Body der Anfrage und wandelt ihn in ein Python-Dict um
-
-    username = data.get("username")    # Holt den Wert zu "username" aus dem JSON (oder None, wenn nicht vorhanden)
-    password = data.get("password")    # Holt den Wert zu "password"
-
-    if not username or not password:   # Validierung: Beide Felder müssen vorhanden und nicht leer sein
-        return jsonify({               # Falls ungültig: Fehlermeldung als JSON zurückgeben …
-            "error": "username und password sind Pflichtfelder"
-        }), 400                        # … mit HTTP-Status 400 (Bad Request)
-
-    # Prüfen, ob es den Benutzernamen schon gibt (einfacher Duplikat-Check in der Liste)
+    # Prüfen, ob Username schon existiert
     if any(u.username == username for u in users):
         return jsonify({"error": "Benutzername existiert bereits"}), 400
 
-    new_id = len(users) + 1            # Einfache ID-Vergabe: Anzahl existierender Benutzer + 1
-    new_user = User(new_id, username, password)  # Erzeugt ein neues User-Objekt
+    # Neuen Benutzer anlegen
+    new_id = len(users) + 1
+    new_user = User(new_id, username, password)
+    users.append(new_user)
 
-    users.append(new_user)             # Speichert den neuen Benutzer in unserer "Mini-Datenbank" (Liste)
-
-    return jsonify({                   # Antwort als JSON: Bestätigung + Benutzer (ohne Passwort)
-        "message": "Benutzer erfolgreich erstellt",
-        "user": new_user.to_json()     # to_json() gibt nur sichere Felder zurück (z. B. kein Passwort)
-    }), 201                            # HTTP-Status 201 = Created (Ressource erzeugt)
+    # Erfolgsantwort zurückgeben
+    return jsonify({"message": "Benutzer erfolgreich erstellt", "user": new_user.to_json()}), 201
 
 
-# ---------------------------------------------------------------
-# 4) Benutzer anzeigen: GET /users
-# ---------------------------------------------------------------
-@app.route("/users", methods=["GET"])   # Definiert Route /users für GET-Anfragen (Liste aller Benutzer)
+# -------------------------------
+# 7) Alle Benutzer anzeigen (GET)
+# -------------------------------
+@app.route("/users", methods=["GET"])
 def get_users():
-    # Wandelt jeden Benutzer mit to_json() in ein Dict um und gibt eine Liste zurück
-    return jsonify([u.to_json() for u in users]), 200  # 200 = OK
+    return jsonify([u.to_json() for u in users]), 200
 
- #das was soll ich in Terminal schreiben
+#Das was soll ich in Terminal schreiben
 """
-$u = @{ username = "ouissal"; password = "1234" } | ConvertTo-Json
+# Alle Tasks
+Invoke-RestMethod -Method GET -Uri http://127.0.0.1:5000/tasks
+
+# Task anlegen
+$body = @{ title="Neue Aufgabe"; description="Test"; status="To Do" } | ConvertTo-Json
+Invoke-RestMethod -Method POST -Uri http://127.0.0.1:5000/tasks -ContentType "application/json" -Body $body
+
+# Task updaten (Beispiel: ID 1)
+$upd = @{ title="Neue Aufgabe (bearbeitet)"; status="Done" } | ConvertTo-Json
+Invoke-RestMethod -Method PUT -Uri http://127.0.0.1:5000/tasks/1 -ContentType "application/json" -Body $upd
+
+# Task löschen (Beispiel: ID 1)
+Invoke-RestMethod -Method DELETE -Uri http://127.0.0.1:5000/tasks/1
+
+# User anlegen
+$u = @{ username="ouissal"; password="1234" } | ConvertTo-Json
 Invoke-RestMethod -Method POST -Uri http://127.0.0.1:5000/users -ContentType "application/json" -Body $u
+
+# User anzeigen
+Invoke-RestMethod -Method GET -Uri http://127.0.0.1:5000/users
 """
 
 
-# ---------------------------------------------------------------
-# 5) Neuen Kalendertag anlegen: POST /days
-# ---------------------------------------------------------------
-@app.route("/days", methods=["POST"])   # Definiert Route /days, akzeptiert POST (neuen Tag anlegen
-def create_day():
-    """
-    Erwartet JSON wie:
-        { "date": "2025-10-28" }
-    Legt einen neuen 'Day' an und speichert ihn in 'days'.
-    """
-    data = request.get_json()          # JSON-Body einlesen
-    date_value = data.get("date")      # Datum als String im ISO-Format, z. B. "2025-10-28"
-
-    if not date_value:                 # Validierung: Datum muss übergeben werden
-        return jsonify({"error": "Datum ist erforderlich"}), 400
-
-    new_id = len(days) + 1             # Einfache ID-Vergabe für Tage
-    new_day = Day(new_id, date_value)  # Erzeugt neues Day-Objekt (mit leerer tasks-Liste)
-
-    days.append(new_day)               # Speichern in unserer "Mini-Datenbank" (Liste)
-
-    return jsonify({                   # JSON-Antwort mit Bestätigung und dem neuen Tag
-        "message": "Neuer Tag erstellt",
-        "day": new_day.to_json()
-    }), 201
-
-
-# ---------------------------------------------------------------
-# 6) Alle Kalendertage anzeigen: GET /days
-# ---------------------------------------------------------------
-@app.route("/days", methods=["GET"])    # Definiert Route /days für GET-Anfragen (Liste aller Tage)
-def get_days():
-    # Gibt ALLE Days zurück; jeder Day enthält seine tasks bereits als Liste (siehe Day.to_json())
-    return jsonify([d.to_json() for d in days]), 200
-
- # das was soll ich in Terminal schreiben
-""" 
-$d = @{ date = "2025-10-28" } | ConvertTo-Json
-Invoke-RestMethod -Method POST -Uri http://127.0.0.1:5000/days -ContentType "application/json" -Body $d
-"""
-
-
-# ---------------------------------------------------------------
-# 7) Aufgabe einem bestimmten Tag hinzufügen: POST /days/<id>/tasks
-# ---------------------------------------------------------------
-@app.route("/days/<int:day_id>/tasks", methods=["POST"])  # Route mit Pfad-Parameter <int:day_id> (muss eine Zahl sein)
-def add_task_to_day(day_id):
-    """
-    Hängt eine neue Aufgabe an den Tag mit der ID 'day_id'.
-    Erwarteter JSON-Body:
-        {
-          "title": "Python lernen",
-          "description": "Flask API weiterbauen",
-          "status": "To Do",          # optional (Standard: "To Do")
-          "user_id": 1                # optional: Zuordnung zu einem Benutzer
-        }
-    """
-    # 1) Tag suchen, zu dem die Aufgabe hinzugefügt werden soll
-    day = next((d for d in days if d.id == day_id), None)  # Sucht in der Liste 'days' den Tag mit passender ID
-    if not day:                                            # Wenn nicht gefunden:
-        return jsonify({"error": f"Tag mit ID {day_id} wurde nicht gefunden"}), 404  # 404 = Not Found
-
-    # 2) Daten der neuen Aufgabe einlesen
-    data = request.get_json()           # JSON-Body in Dict umwandeln
-    title = data.get("title")           # Pflichtfeld: Kurzer Titel der Aufgabe
-    description = data.get("description")  # Pflichtfeld: Beschreibung/Details
-    status = data.get("status", "To Do")   # Optional: Status, Standard "To Do"
-    user_id = data.get("user_id")          # Optional: Zuordnung zu einem Benutzer (ID)
-
-    # 3) Pflichtfelder prüfen
-    if not title or not description:    # Wenn Titel oder Beschreibung fehlen:
-        return jsonify({"error": "title und description sind Pflichtfelder"}), 400  # 400 = Bad Request
-
-    # 4) Neue Aufgaben-ID vergeben
-    new_id = len(tasks) + 1             # Einfache ID-Vergabe basierend auf Gesamtzahl der Aufgaben
-
-    # 5) Task-Objekt erzeugen (inkl. Zuordnung zu user_id und day_id)
-    new_task = Task(new_id, title, description, status, user_id, day_id)
-
-    # 6) In globaler Liste speichern (damit wir alle Aufgaben zentral haben)
-    tasks.append(new_task)
-
-    # 7) UND auch am gewünschten Tag „anhängen“, damit der Tag seine Aufgaben kennt
-    day.add_task(new_task)
-
-    # 8) JSON-Antwort mit Bestätigung und neuem Task-Objekt
-    return jsonify({
-        "message": f"Task wurde zum Tag {day_id} hinzugefügt",
-        "task": new_task.to_json()
-    }), 201  # 201 = Created
-       
-
-
-
-
-# ---------------------------------------------------------------
-# 1) Neue Notification (Benachrichtigung) erstellen: POST /notifications
-# ---------------------------------------------------------------
-@app.route("/notifications", methods=["POST"])  # Diese Route reagiert auf POST-Anfragen (etwas Neues anlegen)
-def create_notification():
-    """
-    Diese Funktion erstellt eine neue Benachrichtigung (Notification).
-    Beispiel für den Body, den du an den Server schickst:
-
-        {
-          "message": "Task morgen fällig",
-          "user_id": 1,
-          "task_id": 2,
-          "type": "warning",
-          "title": "Erinnerung"
-        }
-
-    Erklärung:
-    - message  → Text der Benachrichtigung (Pflichtfeld)
-    - user_id  → (optional) für welchen Benutzer
-    - task_id  → (optional) zu welcher Aufgabe gehört die Benachrichtigung
-    - type     → (optional) Art der Nachricht ("info", "success", "warning", "error")
-    - title    → (optional) kurzer Titel oder Überschrift
-    """
-
-    # 1️⃣ JSON-Daten lesen, die der Benutzer im Body gesendet hat.
-    # request.get_json() wandelt den JSON-Text in ein Python-Dictionary um.
-    # Das „or {}“ sorgt dafür, dass wir eine leere Dict haben, wenn nichts geschickt wurde.
-    data = request.get_json() or {}
-
-    # 2️⃣ Das wichtigste Feld ist „message“ – ohne das ergibt eine Notification keinen Sinn.
-    message = data.get("message")
-
-    # Wenn keine Nachricht gesendet wurde → Fehlerantwort mit Status 400 (Bad Request)
-    if not message:
-        return jsonify({"error": "message ist erforderlich"}), 400
-
-    # 3️⃣ Eine neue eindeutige ID vergeben
-    # Wenn schon Notifications existieren, nehmen wir die letzte ID + 1
-    # Wenn es noch keine gibt, starten wir mit ID = 1
-    new_id = notifications[-1].id + 1 if notifications else 1
-
-    # 4️⃣ Neues Notification-Objekt erzeugen (siehe models.py → class Notification)
-    n = Notification(
-        id=new_id,                       # eindeutige ID
-        message=message,                 # Nachrichtentext
-        user_id=data.get("user_id"),     # optional: Benutzer-ID
-        task_id=data.get("task_id"),     # optional: Task-ID (falls Benachrichtigung zu einer Aufgabe gehört)
-        type=data.get("type", "info"),   # Standardtyp ist "info", falls nichts angegeben
-        title=data.get("title"),         # optional: Titel
-    )
-
-    # 5️⃣ Die neue Notification in unsere Liste einfügen (unsere kleine In-Memory-Datenbank)
-    notifications.append(n)
-
-    # 6️⃣ Antwort an den Client zurückgeben
-    # jsonify() → wandelt Python-Daten in JSON um
-    # Wir schicken eine Bestätigung + das neue Notification-Objekt zurück
-    # Statuscode 201 = „Created“ (etwas wurde erfolgreich erstellt)
-    return jsonify({
-        "message": "Notification erstellt",
-        "notification": n.to_json()  # to_json() wandelt das Objekt in ein Dictionary
-    }), 201
-
-
-# ---------------------------------------------------------------
-# 2) Notifications anzeigen (optional mit Filter): GET /notifications
-# ---------------------------------------------------------------
-@app.route("/notifications", methods=["GET"])  # Diese Route reagiert auf GET-Anfragen (Daten lesen)
-def list_notifications():
-    """
-    Gibt alle Benachrichtigungen zurück.
-    Du kannst optionale Filter in der URL angeben:
-        /notifications?user_id=1&unread=true
-
-    - user_id → zeigt nur die Notifications für diesen Benutzer
-    - unread  → zeigt nur ungelesene Benachrichtigungen (true / false)
-    """
-
-    # 1️⃣ Query-Parameter aus der URL lesen
-    # Beispiel: bei /notifications?user_id=1 → user_id = 1
-    user_id = request.args.get("user_id", type=int)
-
-    # Wenn der Parameter unread=true angegeben wurde, wollen wir nur ungelesene anzeigen.
-    # request.args.get("unread", "false") gibt den Text nach dem = zurück oder "false", wenn nichts da ist.
-    # Wir wandeln alles in Kleinbuchstaben und prüfen, ob es "1", "true" oder "yes" ist.
-    unread = (request.args.get("unread", "false").lower() in ("1", "true", "yes"))
-
-    # 2️⃣ Ausgangsliste ist einfach unsere Notification-Liste
-    items = notifications
-
-    # 3️⃣ Wenn eine user_id angegeben wurde → nur Notifications dieses Benutzers behalten
-    if user_id is not None:
-        items = [n for n in items if n.user_id == user_id]
-
-    # 4️⃣ Wenn unread=True → nur ungelesene Notifications behalten
-    if unread:
-        items = [n for n in items if not n.is_read]
-
-    # 5️⃣ Sortieren (neueste zuerst)
-    # Wir sortieren nach dem Feld created_at (Zeitpunkt der Erstellung)
-    items = sorted(items, key=lambda n: n.created_at, reverse=True)
-
-    # 6️⃣ Rückgabe als JSON-Liste
-    # Jede Notification wird mit to_json() in ein Dictionary umgewandelt
-    return jsonify([n.to_json() for n in items]), 200  # 200 = OK (alles erfolgreich)
-
-
-# ---------------------------------------------------------------
-# 3) Eine Notification als „gelesen“ markieren: PATCH /notifications/<id>/read
-# ---------------------------------------------------------------
-@app.route("/notifications/<int:nid>/read", methods=["PATCH"])  # PATCH = teilweise aktualisieren
-def read_notification(nid):
-    """
-    Markiert eine bestimmte Benachrichtigung als gelesen.
-    Beispiel:
-        PATCH /notifications/3/read
-
-    Bedeutung:
-    - Wir suchen die Notification mit ID 3
-    - Wir setzen is_read = True
-    - Wir speichern den Zeitpunkt in read_at
-    """
-
-    # 1️⃣ Suchen der Notification mit passender ID
-    # next(...) → gibt das erste Element zurück, das zur Bedingung passt
-    # (x for x in notifications if x.id == nid) → Generator, der alle überprüft
-    # Falls keine gefunden wird, kommt None zurück
-    n = next((x for x in notifications if x.id == nid), None)
-
-    # 2️⃣ Wenn keine Notification mit dieser ID existiert → Fehler 404 (Not Found)
-    if not n:
-        return jsonify({"error": "Notification nicht gefunden"}), 404
-
-    # 3️⃣ Wenn sie existiert und noch nicht gelesen wurde:
-    if not n.is_read:
-        n.is_read = True   # Markiere als gelesen
-        from datetime import datetime as _dt
-        n.read_at = _dt.now().isoformat(timespec="seconds")  # Zeitpunkt speichern
-
-    # 4️⃣ Rückgabe: aktualisierte Notification als JSON
-    return jsonify(n.to_json()), 200  # 200 = OK
-
-# das was soll ich in terminal tippen:
-"""
-$body = @{
-  user_id = 1
-  task_id = 2
-  message = "Präsentation morgen fällig"   # Umlaute ok
-  type    = "warning"
-  title   = "Erinnerung"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method POST `
-  -Uri http://127.0.0.1:5000/notifications `
-  -ContentType "application/json; charset=utf-8" `
-  -Body $body
-"""
-
-
-
-# Das hier startet den Server im "Entwicklermodus" (debug=True).
-# Du startest ihn in der Konsole mit:  python app.py
+# -------------------------------
+# 8) Start des Servers
+# -------------------------------
+# Diese Zeilen starten den Webserver.
+# Wenn du "python app.py" im Terminal eingibst, läuft Flask unter http://127.0.0.1:5000/
 if __name__ == "__main__":
-    app.run(debug=True) #Das ist der Befehl, der deine Web-App wirklich startet 🚀
-                        #Ohne diese Zeile passiert nichts — Flask würde einfach still dastehen.
+    app.run(debug=True)  # debug=True zeigt automatisch Fehler an und lädt beim Speichern neu
