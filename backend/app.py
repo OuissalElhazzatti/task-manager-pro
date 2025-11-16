@@ -195,3 +195,11 @@ Invoke-RestMethod -Method GET -Uri http://127.0.0.1:5000/users
 # Wenn du "python app.py" im Terminal eingibst, läuft Flask unter http://127.0.0.1:5000/
 if __name__ == "__main__":
     app.run(debug=True)  # debug=True zeigt automatisch Fehler an und lädt beim Speichern neu
+
+
+    """
+    git status
+git add .
+git commit -m "Refactor: nur User & Task + Routen (SQL-ready)"
+git push -u origin main
+    """
