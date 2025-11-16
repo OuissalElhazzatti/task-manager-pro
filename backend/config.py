@@ -1,24 +1,37 @@
+# ===============================
 # config.py
 # ===============================
-# Diese Datei speichert alle wichtigen Konfigurationen deiner Flask-App.
-# Hier sagst du Flask, welche Datenbank du benutzt und wo sie sich befindet.
-# ===============================
 
-import os  # Das "os"-Modul hilft, Dateipfade zu erstellen, die auf jedem System funktionieren.
+# Diese Datei enthält die Konfiguration für Flask,
+# insbesondere die Einstellungen für die Datenbank.
 
-# BASE_DIR = absoluter Pfad zum aktuellen Projektordner (Backend)
-# Beispiel: "C:\Users\hilcomputer\OneDrive\Bureau\Aufgaben_manager\Backend"
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+import os  # os = erlaubt uns, Pfade zu erstellen oder Umgebungsvariablen zu lesen
 
-# Jetzt erstellen wir eine Klasse "Config".
-# Flask kann diese Klasse automatisch lesen, um Einstellungen zu übernehmen.
 class Config:
-    # SQLALCHEMY_DATABASE_URI → sagt Flask, welche Datenbank wir verwenden.
-    # "sqlite:///" bedeutet, dass wir SQLite nutzen (eine lokale Datei-Datenbank).
-    # Danach fügen wir den Pfad zur Datei "app.db" hinzu, die im Backend-Ordner liegt.
-    SQLALCHEMY_DATABASE_URI = "sqlite:///" + os.path.join(BASE_DIR, "app.db")
+    """
+    Die Config-Klasse speichert alle wichtigen Einstellungen für unsere Flask-App.
+    Flask liest diese Werte später über app.config.from_object(Config)
+    """
 
-    # SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # Diese Zeile schaltet eine unnötige Warnung aus.
-    # (Sie würde sonst bei jeder kleinen Änderung in der DB im Terminal erscheinen.)
+    # -------------------------------
+    # 1) Verbindungs-URL der Datenbank
+    # -------------------------------
+    # Wir benutzen SQLite → eine Datei "app.db" in deinem Backend-Ordner.
+    # sqlite:/// bedeutet:
+    #   - 3 / = relativer Pfad
+    #   - "app.db" = Name der Datenbankdatei
+    #
+    # Das ist perfekt für lokale Entwicklung.
+    SQLALCHEMY_DATABASE_URI = "sqlite:///app.db"
+
+    # -------------------------------
+    # 2) SQLAlchemy Warnung ausschalten
+    # -------------------------------
+    # Flask will uns sonst eine unnötige Warnung anzeigen.
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # -------------------------------
+    # 3) (Optional) Debug-Ausgabe
+    # -------------------------------
+    # Du kannst das ändern, aber standardmäßig ist es ok.
+    DEBUG = True
